@@ -4,9 +4,13 @@
 set -e
 
 # change default constants here:
-readonly PREFIX=/usr/local  # install prefix, (can be ~/.local for a user install)
+readonly PREFIX=$VIRTUAL_ENV  # install prefix, (can be ~/.local for a user install)
 readonly DEFAULT_VERSION=4.4.0  # controls the default version (gets reset by the first argument)
 readonly CPUS=$(nproc)  # controls the number of jobs
+# Compute Capabilities can be found here https://developer.nvidia.com/cuda-gpus#compute
+ARCH_BIN=7.2 # AGX Xavier
+#ARCH_BIN=6.2 # Tx2
+readonly TMP_DIR=`pwd`
 
 # better board detection. if it has 6 or more cpus, it probably has a ton of ram too
 if [[ $CPUS -gt 5 ]]; then
@@ -20,13 +24,13 @@ fi
 cleanup () {
 # https://stackoverflow.com/questions/226703/how-do-i-prompt-for-yes-no-cancel-input-in-a-linux-shell-script
     while true ; do
-        echo "Do you wish to remove temporary build files in /tmp/build_opencv ? "
+        echo "Do you wish to remove temporary build files in $TMP_DIR/build_opencv ? "
         if ! [[ "$1" -eq "--test-warning" ]] ; then
             echo "(Doing so may make running tests on the build later impossible)"
         fi
         read -p "Y/N " yn
         case ${yn} in
-            [Yy]* ) rm -rf /tmp/build_opencv ; break;;
+            [Yy]* ) rm -rf $TMP_DIR/build_opencv ; break;;
             [Nn]* ) exit ;;
             * ) echo "Please answer yes or no." ;;
         esac
@@ -34,9 +38,9 @@ cleanup () {
 }
 
 setup () {
-    cd /tmp
+    cd $TMP_DIR
     if [[ -d "build_opencv" ]] ; then
-        echo "It appears an existing build exists in /tmp/build_opencv"
+        echo "It appears an existing build exists in $TMP_DIR/build_opencv"
         cleanup
     fi
     mkdir build_opencv
@@ -103,28 +107,29 @@ install_dependencies () {
 
 configure () {
     local CMAKEFLAGS="
+	-D CMAKE_INSTALL_PREFIX=$VIRTUAL_ENV 
+	-D PYTHON_EXECUTABLE=$VIRTUAL_ENV/bin/python 
+	-D PYTHON_PACKAGES_PATH=$VIRTUAL_ENV/lib/python3.8/site-packages
         -D BUILD_EXAMPLES=OFF
         -D BUILD_opencv_python2=ON
         -D BUILD_opencv_python3=ON
         -D CMAKE_BUILD_TYPE=RELEASE
-        -D CMAKE_INSTALL_PREFIX=${PREFIX}
-        -D CUDA_ARCH_BIN=5.3,6.2,7.2
+        -D CUDA_ARCH_BIN=${ARCH_BIN}
         -D CUDA_ARCH_PTX=
         -D CUDA_FAST_MATH=ON
-        -D CUDNN_VERSION='8.0'
+        -D CUDNN_VERSION='8.2'
         -D EIGEN_INCLUDE_PATH=/usr/include/eigen3 
         -D ENABLE_NEON=ON
         -D OPENCV_DNN_CUDA=ON
         -D OPENCV_ENABLE_NONFREE=ON
-        -D OPENCV_EXTRA_MODULES_PATH=/tmp/build_opencv/opencv_contrib/modules
+        -D OPENCV_EXTRA_MODULES_PATH=$TMP_DIR/build_opencv/opencv_contrib/modules
         -D OPENCV_GENERATE_PKGCONFIG=ON
         -D WITH_CUBLAS=ON
         -D WITH_CUDA=ON
         -D WITH_CUDNN=ON
         -D WITH_GSTREAMER=ON
         -D WITH_LIBV4L=ON
-        -D WITH_OPENGL=ON
-	-D WITH_QT=ON"
+        -D WITH_OPENGL=ON"
 
     if [[ "$1" != "test" ]] ; then
         CMAKEFLAGS="
